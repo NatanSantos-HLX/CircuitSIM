@@ -4,6 +4,8 @@ import numpy as np
 import random
 
 
+Rshunt= ("Rshunt", 1@PU.u_mΩ)
+
 class Circus:
 
     def __init__(self, elements_list, N):
@@ -22,6 +24,9 @@ class Circus:
         self.node_list.append("GND")
 
     def generate_gene(self):
+        self.out = random.choice(self.node_list)
+        while (self.out == 'Vin') or (self.out == 'GND'):
+            self.out = random.choice(self.node_list)
         self.components = random.choices(self.elements_names, k=self.quantity)
         self.nodes = []
         for comp in self.components:
@@ -29,21 +34,14 @@ class Circus:
             end = np.random.randint(start + 1, self.quantity + 1)
             self.nodes.append(self.node_list[start])
             self.nodes.append(self.node_list[end])
-        self.check_out()
         self.assemble_gene()
 
-    def check_out(self):
-        self.out = random.choice(self.nodes)
-        while (self.out == 'Vin') or (self.out == 'GND'):
-            self.out = random.choice(self.nodes)
-
     def assemble_gene(self):
-        self.gene = []
+        self.gene = [self.out]
         for c, comp in enumerate(self.components):
             self.gene.append(self.nodes[2 * c])
             self.gene.append(comp)
             self.gene.append(self.nodes[2 * c + 1])
-        self.gene.append(self.out)
 
     def mutation(self):
         for c in range(self.quantity):
@@ -96,68 +94,43 @@ def crossover(circ1, circ2, verbose):
     return cross1, cross2
 
 
-def assemble_circuit(circ, verbose=False):
-    circ1.circuit_gene = circ1.gene
-    begin = '0'
-    if "Vin" not in circ.nodes:
-        without_0 = True
-        n = 0
-        while without_0 == True:
-            if "n{}".format(n) in circ1.nodes:
-                begin = n
-                without_0 = False
-            else:
-                n += 1
-        circ1.circuit_gene = ["Vin" if x == "n{}".format(
-            begin) else x for x in circ1.circuit_gene]
-        if verbose:
-            print("after first node correction:")
-            print(circ1.circuit_gene)
-    if "GND" not in circ.nodes:
-        without_0 = True
-        n = circ1.quantity - 1
-        while without_0 == True:
-            if "n{}".format(n) in circ1.nodes:
-                end = n
-                without_0 = False
-            else:
-                n -= 1
-        circ1.circuit_gene = ["GND" if x == "n{}".format(
-            end) else x for x in circ1.circuit_gene]
-        if verbose:
-            print("after last node correction:")
-            print(circ1.circuit_gene)
+def assemble_circuit(circ,verbose):
+    #short-circuits
+    conns_circuit={}
+    for i in range(N):
+        node1=circ.circuit_gene[i*3+1]
+        component=circ.circuit_gene[i*3+2]
+        node2=circ.circuit_gene[i*3+3]
+        node=[node1,node2]
+        node.sort()
+        if (node1+node2 in conns_circuit):
+            conns_circuit[node1+node2].append(component)
+        else:
+            conns_circuit[node1+node2]=[component]
+    for n in range(len(circ.node_list)-1):
+        node1 = circ.node_list[n]
+        node2 = circ.node_list[n+1]
+        if node1+node2 not in conns_circuit:
+            circ.circuit_gene.append(node1)
+            circ.circuit_gene.append("jumper")
+            circ.circuit_gene.append(node2)
+    return circ
 
-    for n in range(begin + 1, circ1.quantity):
-        pos = n
-        node = "n{}".format(pos)
-        count = circ1.circuit_gene.count(node)
-        while count == 1:
-            node = "n{}".format(pos)
-            if pos == begin + 1:
-                circ1.circuit_gene = ["Vin" if x ==
-                                      node else x for x in circ1.circuit_gene]
-                count = 2
-            else:
-                change = "n{}".format(pos - 1)
-                circ1.circuit_gene = [change if x ==
-                                      node else x for x in circ1.circuit_gene]
-                count = circ1.circuit_gene.count(change)
-                pos -= 1
-    if verbose:
-        print("after reconnections:")
-        print(circ1.circuit_gene)
+def draw(circ):
+    N=circ.quantity
+    conns={}
+    for i in range(N):
+        node1=circ.gene[i*3]
+        component=circ.gene[i*3+1]
+        node2=circ.gene[i*3+2]
+        node=[node1,node2]
+        node.sort()
+        if (node1+node2 in conns):
+            conns[node1+node2].append(component)
+        else:
+            conns[node1+node2]=[component]
+    print(conns)
 
-        counter={}
-        count = circ1.circuit_gene.count("Vin")
-        counter["Vin"]=count
-        for n in range(begin + 1, circ1.quantity):
-            node = "n{}".format(n)
-            count = circ1.circuit_gene.count(node)
-            counter[node]=count
-        count = circ1.circuit_gene.count("GND")
-        counter["GND"]=count
-        print("number of connections", counter)
 
 if __name__ == "__main__":
     elements = {"R1": (1, 500@PU.u_Ω),
@@ -172,9 +145,10 @@ if __name__ == "__main__":
                 "L3": (3, 15@PU.u_uH)
                 }
     verb = True
-    N = 20
+    N = 5
     circ1 = Circus(elements, N)
     # circ2=Circus(elements,N)
+    circ1.circuit_gene = circ1.gene
 
     # cross1,cross2=crossover(circ1,circ2,verb)
     print("original gene")
@@ -182,4 +156,6 @@ if __name__ == "__main__":
     # print(circ1.nodes)
     # circ1.mutation()
     # print(circ1.gene)
-    assemble_circuit(circ1, verb)
+    circ1=assemble_circuit(circ1, verb)
+    print(circ1.circuit_gene)
+    draw(circ1)
